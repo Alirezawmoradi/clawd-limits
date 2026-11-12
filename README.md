@@ -1,15 +1,24 @@
-# Clawd Limits
+<div align="center">
 
-A Claude Code mod that puts **Clawd** above your prompt to show your **5-hour** and **weekly** usage limits. Clawd's mood and colour change as the windows fill: chill, working, sweaty, nervous, panic, then napping until the reset.
+# 🦀 Clawd Limits
 
-```
- ▐▛███▜▌  5h   █████████████░░░░░░░  63%  ↻ 1h 12m · 12:12 Berlin
-▝▜█████▛▘
-  ▘▘ ▝▝   week ████░░░░░░░░░░░░░░░░  21%  ↻ 3d 19h · Mon 06:30 Berlin
-          💦 "pacing myself... mostly"
-```
+**Your usage limits, reported by a tiny pixel creature with feelings.**
 
-## Install
+<img src="assets/clawd-demo.svg" alt="Animated preview: Clawd changes mood and colour as the 5-hour and weekly bars fill" width="820">
+
+*A [Claude Code](https://claude.com/claude-code) mod that puts Clawd above your prompt to keep an eye on your **5-hour** and **weekly** limits, so you don't have to.*
+
+</div>
+
+---
+
+## 🤔 Why?
+
+Because hitting your limit mid-refactor is a jump scare. Clawd sits just above your prompt and shows you exactly how much is left, when it resets, and *how it feels about all this*.
+
+Spoiler: the closer you get to 100%, the worse it feels.
+
+## 🚀 Install
 
 At the prompt of a Claude Code terminal session:
 
@@ -23,37 +32,94 @@ Or from a shell:
 claude plugin install clawd-limits --marketplace Alirezawmoradi/clawd-limits
 ```
 
-Requires a recent Claude Code with mods (function hooks) support, and a Claude subscription: API-key sessions have no 5h or weekly windows to show.
+Then say hi to Clawd. That's it. No config, no API keys, no feeding schedule.
 
-## What it shows
+> **Needs:** a recent Claude Code with mods support, and a Claude **subscription**. API-key sessions don't have 5-hour or weekly windows, so Clawd would just stand there waiting forever. Sad.
 
-| Usage (fuller window) | Clawd | Colour | Says |
-|---|---|---|---|
-| 0–25% | chill ♪ | Clawd orange | "fresh tokens, who dis" |
-| 25–50% | working ⌨ | Clawd orange | "in the zone, don't mind me" |
-| 50–70% | sweaty 💦 | yellow | "pacing myself... mostly" |
-| 70–90% | nervous ‼ | bright orange | "maybe smaller prompts?" |
-| 90–100% | panic 🔥 | red | "SAVE ME A FEW TOKENS" |
-| 100% | napping zZ | purple | "zzz — back at 15:40" |
-| just reset | party 🎉 | pink | "limits refreshed!" (5 min) |
+## 🎭 Meet the moods
 
-- Each window shows its percent used, a countdown to reset, and the reset time (24h) in your local time zone.
-- Clawd blinks, its prop animates, and it bounces when its mood changes.
-- A toast warns once when a window passes 95%, and another celebrates a reset.
-- The numbers arrive with each Claude response, so a new session shows a waiting Clawd until your first message.
+Clawd's mood follows whichever window is **fuller**: the 5-hour one or the weekly one. As usage climbs, Clawd changes pose, colour, prop and what it says.
 
-## Commands
+<div align="center">
+<img src="assets/clawd-moods.svg" alt="Clawd's seven moods: chill, working, sweaty, nervous, panic, napping and party" width="820">
+</div>
 
-- `/limits` hides or shows the band.
+| Usage | Mood | Colour | What Clawd does | What Clawd says |
+|---|---|---|---|---|
+| 0–25% | 😎 **Chill** | Clawd orange | Hums a little tune ♪♫ and dances every now and then | *"fresh tokens, who dis"* |
+| 25–50% | 🙂 **Working** | Clawd orange | Taps away on a tiny keyboard ⌨ | *"in the zone, don't mind me"* |
+| 50–70% | 😅 **Sweaty** | 🟡 yellow | A sweat drop 💦 appears and disappears. It's fine. Probably. | *"pacing myself... mostly"* |
+| 70–90% | 😰 **Nervous** | 🟠 bright orange | Trembles every few seconds ‼ | *"maybe smaller prompts?"* |
+| 90–100% | 😱 **Panic** | 🔴 red | Shakes side to side, on fire 🔥 | *"SAVE ME A FEW TOKENS"* |
+| 100% | 😴 **Napping** | 🟣 purple | Eyes closed, little `z`s float up into the sky | *"zzz — back at 15:40"* |
+| Just reset | 🥳 **Party** | 🩷 pink | Arms up, sparkles ✦ ✧ drift overhead, for 5 whole minutes | *"limits refreshed!"* |
 
-## Develop
+While everything is fine (under 50%), Clawd keeps its **original orange**. The colour only changes when things get interesting. The bars always wear Clawd's current colour, so you can read the mood from across the room.
+
+## 🕺 Clawd's moves
+
+| Move | When |
+|---|---|
+| 👀 **Blink** | Every 5 seconds, because staring is rude |
+| 💃 **Little dance** | A sway left and right every ~10 seconds while idle (chill, working, sweaty, party) |
+| 🚶 **Walk in place** | The whole time Claude is replying: Clawd is *busy* |
+| 🦘 **Bounce** | Whenever the mood changes, so you notice |
+| 🫨 **Tremble / shake** | Nervous trembles a little; panic shakes in bursts |
+| 💤 **Floating Zzz** | While napping, a `z` drifts up and turns into a `Z` |
+| ✨ **Sparkles** | During the reset party |
+
+Calm by design: nothing flashes while you're trying to read.
+
+## 📊 What the band shows
+
+```
+ ▐▛███▜▌  5h   █████████████░░░░░░░  63%  ↻ 1h 12m · 12:12 Berlin
+▝▜█████▛▘
+  ▘▘ ▝▝   week ████░░░░░░░░░░░░░░░░  21%  ↻ 3d 19h · Mon 06:30 Berlin
+          💦 "pacing myself... mostly"
+```
+
+- **Percent used** for each window
+- **Countdown** to the reset (`↻ 1h 12m`)
+- **Reset time** in 24h, in *your* time zone (Clawd reads your system clock, so you'll see your own city)
+- An empty row on top and between the bars, so nothing feels cramped
+
+### 🔔 Toasts
+
+- 🔥 **95%**: one warning per window, so you can wrap up before Clawd falls asleep on you.
+- 🎉 **Reset**: a little celebration when a window refreshes.
+
+## ⌨️ Commands
+
+| Command | Does |
+|---|---|
+| `/limits` | Hides Clawd. Run it again and Clawd comes back, no hard feelings. |
+
+## ❓ FAQ
+
+**Clawd says "send a message and I'll read your limits". Is it broken?**
+Nope. Claude Code only learns your limits from a response, so Clawd waits for your first message in each session.
+
+**Why is Clawd purple and asleep?**
+You hit 100%. Clawd is napping until the time shown. Maybe you should take a break too. ☕
+
+**Does Clawd cost tokens?**
+Not a single one. Clawd only reads numbers Claude Code already has. No extra requests, ever.
+
+**Can I make Clawd stop dancing?**
+`/limits` hides it. Clawd will be sad, but it understands.
+
+## 🛠️ Develop
 
 ```
 claude --plugin-dir .          # run a session with the mod loaded from this folder
 claude plugin validate .       # check the manifest and hooks module
 claude plugin test .           # run tests/*.test.tsx
+node scripts/make-art.mjs      # regenerate the README art in assets/
 ```
 
-## License
+The README art is drawn from the very same block-character sprite the mod uses, so the pictures never lie.
 
-MIT
+## 📜 License
+
+MIT. Clawd is the Claude Code mascot from Anthropic; this is an unofficial fan-made mod and is not affiliated with or endorsed by Anthropic.
