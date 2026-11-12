@@ -12,6 +12,9 @@ export type BurnSample = { at: number; pct: number }
 /** The main-thread task (turn) running now, and the 5h % when it began. */
 export type TaskInfo = { turnId: string; startPct: number | null }
 
+/** A `/limits preview` run: one mood for 15 s, or a tour of every mood. */
+export type PreviewInfo = { mood: string; isTour: boolean; startedAt: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'clawd-limits': {
@@ -37,6 +40,10 @@ declare module 'claude-code' {
       task: Shaped<TaskInfo | null>
       /** Turn ids already given the "burning fast" tip. */
       tipped: string[]
+      /** How full the context window is, 0–100; -1 before the first reading. */
+      ctxUsed: number
+      /** The preview running now, if any (it expires by time). */
+      preview: Shaped<PreviewInfo | null>
     }
   }
 }

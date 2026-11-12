@@ -106,3 +106,67 @@ test('a task burning fast makes Clawd thirsty, with the burn rate', async ($, on
   await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as any)
   expect(await drawn($)).toContain("in the zone, don't mind me")
 })
+
+function seedClock(on: any, clock: { now: number }, ctxPercent?: number, fivePct = 30) {
+  on('command.register', () => ({ value: { command: 'limits' } }))
+  on('clock.now', () => ({ value: clock.now }))
+  on('clock.every', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: NOW,
+      context: ctxPercent === undefined ? {} : { percent: ctxPercent, window: 200_000 },
+      rateLimits: [
+        { kind: 'five_hour', percentUsed: fivePct, resetsAt: '2026-11-12T13:00:00Z' },
+        { kind: 'seven_day', percentUsed: 10, resetsAt: '2026-11-16T05:30:00Z' },
+      ],
+    },
+  }))
+  on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
+}
+
+test('the context shows as a fuel gauge with what is left', async ($, on) => {
+  seedClock(on, { now: NOW }, 62)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const text = await drawn($)
+  expect(text).toContain('⛽ ctx E ▰▰▰▱▱▱▱▱ F 38% left')
+})
+
+test('/limits preview tours the moods, then goes back to the real ones', async ($, on) => {
+  const clock = { now: NOW }
+  seedClock(on, clock)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const answer: any = await $.command.run({ command: 'limits', args: 'preview' } as any)
+  expect(answer.text).toContain('mood tour')
+  expect(await drawn($)).toContain('fresh tokens, who dis')
+
+  clock.now = NOW + 7_000 // third stop of the tour
+  const thirsty = await drawn($)
+  expect(thirsty).toContain('so... thirsty...')
+  expect(thirsty).toContain('preview · ')
+
+  clock.now = NOW + 60_000 // the tour is over: real readings (30%) again
+  expect(await drawn($)).toContain("in the zone, don't mind me")
+})
+
+test('/limits preview with one mood, and an unknown one', async ($, on) => {
+  seedClock(on, { now: NOW })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const unknown: any = await $.command.run({ command: 'limits', args: 'preview grumpy' } as any)
+  expect(unknown.text).toContain("doesn't know")
+
+  await $.command.run({ command: 'limits', args: 'preview napping' } as any)
+  expect(await drawn($)).toContain('zzz — back at')
+})
+
+test('the fuel gauge lines up with the reset times', async ($, on) => {
+  // Chill (15%): a quip short enough to leave room before the times column.
+  seedClock(on, { now: NOW }, 62, 15)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const lines = (await drawn($)).split('\n')
+  const barRow = lines.find((l: string) => l.includes('5h ') && l.includes('↻')) ?? ''
+  const quipRow = lines.find((l: string) => l.startsWith(' '.repeat(12)) && l.includes('⛽')) ?? ''
+  expect(quipRow.indexOf('⛽')).toBe(barRow.indexOf('↻'))
+})

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { BurnSample, LimitWindow, TaskInfo } from '../types'
+import type { BurnSample, LimitWindow, PreviewInfo, TaskInfo } from '../types'
 
 // ── State ────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,8 @@ const alertedAtom = atom({ plugin: 'clawd-limits', key: 'alerted' } as const, []
 const samplesAtom = atom({ plugin: 'clawd-limits', key: 'samples' } as const, [], { shape: 'samples-1' })
 const taskAtom = atom({ plugin: 'clawd-limits', key: 'task' } as const, null, { shape: 'task-1' })
 const tippedAtom = atom({ plugin: 'clawd-limits', key: 'tipped' } as const, [])
+const ctxAtom = atom({ plugin: 'clawd-limits', key: 'ctxUsed' } as const, -1)
+const previewAtom = atom({ plugin: 'clawd-limits', key: 'preview' } as const, null, { shape: 'preview-1' })
 
 const TICK_MS = 500
 const PARTY_MS = 5 * 60_000
@@ -28,6 +30,16 @@ const RATE_WINDOW_MS = 5 * 60_000 // the burn rate looks back this far
 const MIN_RATE_SPAN_MIN = 2 // never divide by less than 2 minutes (no spikes)
 const TONGUE_COLOR = '#f472b6'
 
+// Context fuel gauge.
+const FUEL_SEGMENTS = 8
+const LOW_FUEL_COLOR = '#ef4444'
+const PREVIEW_TAG = 'preview · '
+
+/** Terminal cells a short string takes: emoji (U+1F000 and up) are two wide. */
+function cells(text: string): number {
+  return Array.from(text).reduce((sum, ch) => sum + ((ch.codePointAt(0) ?? 0) >= 0x1f000 ? 2 : 1), 0)
+}
+
 // ── Moods ────────────────────────────────────────────────────────────────
 
 type Mood =
@@ -36,9 +48,9 @@ type Mood =
 const MOOD: Record<Mood, { color: string; prop: [string, string]; quip: string }> = {
   waiting: { color: '#D97757', prop: ['…', ' '], quip: "send a message and I'll read your limits" },
   chill: { color: '#D97757', prop: ['♪', '♫'], quip: 'fresh tokens, who dis' },
-  working: { color: '#D97757', prop: ['⌨', '⌨'], quip: "in the zone, don't mind me" },
+  working: { color: '#D97757', prop: ['💻', '💻'], quip: "in the zone, don't mind me" },
   sweaty: { color: '#eab308', prop: ['💦', '  '], quip: 'pacing myself... mostly' },
-  nervous: { color: '#ff6a00', prop: ['‼', '!'], quip: 'maybe smaller prompts?' },
+  nervous: { color: '#ff6a00', prop: ['😬', '😰'], quip: 'maybe smaller prompts?' },
   panic: { color: '#ef4444', prop: ['🔥', '🔥'], quip: 'SAVE ME A FEW TOKENS' },
   napping: { color: '#a78bfa', prop: ['z', 'Z'], quip: 'zzz' },
   party: { color: '#ec4899', prop: ['🎉', '✨'], quip: 'limits refreshed!' },
@@ -271,12 +283,67 @@ function moodOf(rows: Shown[], isParty: boolean, isThirsty: boolean): { mood: Mo
   return { mood, base, fullest }
 }
 
-/** Everything a tick or a drawing needs to pick the mood, read in one place. */
+/** Keeps how full the context window is (0–100), when the engine says. */
+async function ingestContext($: EngineInterface, percent: number | undefined) {
+  if (typeof percent === 'number') await update($, ctxAtom, () => Math.round(percent))
+}
+
+// ── Preview (/limits preview [mood]) ─────────────────────────────────────
+
+const PREVIEW_MOODS = ['chill', 'working', 'thirsty', 'sweaty', 'nervous', 'panic', 'napping', 'party'] as const
+const TOUR_STEP_MS = 3_000
+const SINGLE_MS = 15_000
+
+/** Made-up numbers that put Clawd in each mood (ctx = context used). */
+const FAKE: Record<string, { five: number; week: number; ctx: number }> = {
+  chill: { five: 12, week: 5, ctx: 10 },
+  working: { five: 38, week: 14, ctx: 35 },
+  thirsty: { five: 46, week: 21, ctx: 62 },
+  sweaty: { five: 63, week: 21, ctx: 48 },
+  nervous: { five: 81, week: 27, ctx: 70 },
+  panic: { five: 96, week: 33, ctx: 85 },
+  napping: { five: 100, week: 36, ctx: 40 },
+  party: { five: 0, week: 36, ctx: 5 },
+}
+
+/** The mood a preview shows now, or null once it has run out. */
+function previewMood(preview: PreviewInfo | null, now: number): string | null {
+  if (!preview) return null
+  const elapsed = now - preview.startedAt
+  if (preview.isTour) return PREVIEW_MOODS[Math.floor(elapsed / TOUR_STEP_MS)] ?? null
+  return elapsed < SINGLE_MS ? preview.mood : null
+}
+
+/** Fake windows for a previewed mood; party's 5h window has just reset. */
+function fakeWindows(mood: string, now: number): LimitWindow[] {
+  const fake = FAKE[mood] ?? { five: 40, week: 20, ctx: 30 }
+  const iso = (ms: number) => new Date(now + ms).toISOString()
+  return [
+    { kind: 'five_hour', percentUsed: fake.five, resetsAt: mood === 'party' ? iso(-60_000) : iso(72 * 60_000) },
+    { kind: 'seven_day', percentUsed: fake.week, resetsAt: iso((3 * 24 + 19) * 3_600_000) },
+  ]
+}
+
+/**
+ * Everything a tick or a drawing needs to pick the mood, read in one place:
+ * the real readings, or a preview's made-up ones while it runs.
+ */
 async function readMood($: EngineInterface, now: number) {
+  const shownPreview = previewMood(await read($, previewAtom), now)
+  if (shownPreview) {
+    const windows = fakeWindows(shownPreview, now)
+    const rows = shown(windows, now)
+    const isThirsty = shownPreview === 'thirsty'
+    const thirst: Thirst = { isThirsty, rate: isThirsty ? 2 : 0, taskDelta: isThirsty ? 6 : 0 }
+    const ctxUsed = FAKE[shownPreview]?.ctx ?? -1
+    return { windows, rows, thirst, ctxUsed, isPreview: true, ...moodOf(rows, shownPreview === 'party', isThirsty) }
+  }
+
   const windows = await read($, windowsAtom)
   const thirst = thirstOf(await read($, samplesAtom), await read($, taskAtom), fivePct(windows, now), now)
   const rows = shown(windows, now)
-  return { windows, rows, thirst, ...moodOf(rows, (await read($, partyAtom)) > now, thirst.isThirsty) }
+  const ctxUsed = await read($, ctxAtom)
+  return { windows, rows, thirst, ctxUsed, isPreview: false, ...moodOf(rows, (await read($, partyAtom)) > now, thirst.isThirsty) }
 }
 
 /**
@@ -286,20 +353,25 @@ async function readMood($: EngineInterface, now: number) {
 async function onTick($: EngineInterface) {
   const tick = await update($, tickAtom, n => n + 1)
   const now = await $.clock.now()
-  const { windows, mood, thirst } = await readMood($, now)
+  const { windows, mood, thirst, ctxUsed, isPreview } = await readMood($, now)
   if ((await read($, moodAtom)) !== mood) {
     await update($, moodAtom, () => mood)
     await update($, bounceAtom, () => tick + 6)
   }
 
-  if (tick % 4 !== 0) return
+  // A preview is pretend: no tips, no reset parties, no toasts.
+  if (tick % 4 !== 0 || isPreview) return
 
-  // One tip per task once it gets thirsty.
+  // One tip per task once it gets thirsty; it names the context when that
+  // is what makes each message expensive.
   const task = await read($, taskAtom)
   if (mood === 'thirsty' && task && !(await read($, tippedAtom)).includes(task.turnId)) {
     await update($, tippedAtom, list => [...list, task.turnId].slice(-20))
+    const speed = `${thirst.rate.toFixed(1)}%/min, +${Math.round(thirst.taskDelta)}% so far`
     $.ui.toast(
-      `🌵 Clawd: this task is burning fast (${thirst.rate.toFixed(1)}%/min, +${Math.round(thirst.taskDelta)}% so far) — consider /compact or a smaller model.`,
+      ctxUsed >= 60
+        ? `🌵 Clawd: this task is burning fast (${speed}) and your context is ${ctxUsed}% full — /compact would make each message cheaper.`
+        : `🌵 Clawd: this task is burning fast (${speed}) — consider /compact or a smaller model.`,
     )
   }
 
@@ -322,10 +394,13 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'limits',
-      description: 'Show or hide Clawd and your 5h / weekly usage limits',
+      description: 'Show or hide Clawd and your 5h / weekly usage limits; "preview [mood]" shows off the moods',
+      argumentHint: '[preview [mood]]',
+      immediate: true,
     })
     const usage = await $.session.usage()
     await ingest($, usage.rateLimits)
+    await ingestContext($, usage.context.percent)
     $.clock.every(TICK_MS, () => void onTick($))
 
     return next(e)
@@ -353,11 +428,28 @@ export const register: Register = on => {
 
   on('session.measure', async ($, e, next) => {
     if (e.changed.includes('rateLimits')) await ingest($, e.rateLimits)
+    if (e.changed.includes('context')) await ingestContext($, e.context.percent)
 
     return next(e)
   })
 
-  on('command.run', { command: 'limits' }, async $ => {
+  on('command.run', { command: 'limits' }, async ($, e) => {
+    const [verb, name] = e.args.trim().toLowerCase().split(/\s+/)
+
+    if (verb === 'preview') {
+      if (name && !(PREVIEW_MOODS as readonly string[]).includes(name)) {
+        return { text: `Clawd doesn't know "${name}". Try one of: ${PREVIEW_MOODS.join(', ')}.` }
+      }
+      const preview: PreviewInfo = { mood: name ?? '', isTour: !name, startedAt: await $.clock.now() }
+      await update($, previewAtom, () => preview)
+      await update($, hiddenAtom, () => false)
+      return {
+        text: name
+          ? `Clawd is showing off "${name}" for 15 seconds (made-up numbers).`
+          : `Clawd's mood tour: ${PREVIEW_MOODS.length} moods, 3 seconds each (made-up numbers).`,
+      }
+    }
+
     const isHidden = await update($, hiddenAtom, was => !was)
 
     return { text: isHidden ? 'Clawd is hiding. Run /limits to bring Clawd back.' : 'Clawd is back on duty.' }
@@ -369,13 +461,13 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const tick = await read($, tickAtom)
-    const { rows, mood, base, fullest, thirst } = await readMood($, now)
+    const { rows, mood, base, fullest, thirst, ctxUsed, isPreview } = await readMood($, now)
     const isBouncing = tick < (await read($, bounceAtom))
 
     // Thirsty Clawd keeps the colour of the usage level underneath.
     const look = { ...MOOD[mood], color: MOOD[base].color }
     const art = sprite(mood, tick, { isBouncing, isWorking: e.props.isWorking })
-    const prop = look.prop[Math.floor(tick / 2) % 2]
+    const prop = look.prop[Math.floor(tick / 2) % 2] ?? ''
     const zone = zoneLabel()
     const columns = e.viewport?.columns ?? 100
     const barWidth = Math.max(8, Math.min(20, columns - 58))
@@ -398,6 +490,38 @@ export const register: Register = on => {
         burn = `🔥 this task: +${Math.round(thirst.taskDelta)}%`
       }
     }
+
+    // The gauge starts in the column of the bars' "↻" reset times:
+    // label (4) + space + bar + " 100%" + two spaces.
+    const timesColumn = SPRITE_WIDTH + 5 + barWidth + 5 + 2
+    const quipRowUsed =
+      SPRITE_WIDTH + cells(prop) + 1 + (isPreview ? PREVIEW_TAG.length : 0) + cells(quip) + 2
+    const fuelPad = Math.max(2, timesColumn - quipRowUsed)
+
+    // A faint dotted line between the bars and the quip row, from under the
+    // labels to about the end of the reset times.
+    const dividerWidth = Math.max(10, Math.min(columns - SPRITE_WIDTH - 1, timesColumn - SPRITE_WIDTH + 24))
+
+    // Context as a car's fuel gauge: a full tank in a fresh session, draining
+    // toward E as the conversation grows; red with ⚠ when 20% or less is left.
+    const fuel = (() => {
+      if (ctxUsed < 0) return null
+      const left = Math.max(0, Math.min(100, 100 - ctxUsed))
+      const lit = Math.round((left / 100) * FUEL_SEGMENTS)
+      const isLow = left <= 20
+      const color = isLow ? LOW_FUEL_COLOR : look.color
+      return (
+        <Text>
+          <Text dimColor>{' '.repeat(fuelPad)}⛽ ctx E </Text>
+          <Text color={color}>{'▰'.repeat(lit)}</Text>
+          <Text dimColor>{'▱'.repeat(FUEL_SEGMENTS - lit)}</Text>
+          <Text dimColor> F </Text>
+          <Text color={color} weight="bold" tabular>{left}%</Text>
+          <Text dimColor> left</Text>
+          {isLow ? <Text color={LOW_FUEL_COLOR}> ⚠</Text> : null}
+        </Text>
+      )
+    })()
 
     // The tongue (▌ on the legs row while panting) is drawn pink.
     const legsRow = (text: string) => {
@@ -450,8 +574,14 @@ export const register: Register = on => {
         </Text>
         <Text>
           <Text>{' '.repeat(SPRITE_WIDTH)}</Text>
+          <Text dimColor>{'┈'.repeat(dividerWidth)}</Text>
+        </Text>
+        <Text>
+          <Text>{' '.repeat(SPRITE_WIDTH)}</Text>
           <Text color={look.color}>{prop} </Text>
+          {isPreview ? <Text dimColor>{PREVIEW_TAG}</Text> : null}
           <Text italic>"{quip}"</Text>
+          {fuel}
           {burn ? <Text color={look.color}>  {burn}</Text> : null}
         </Text>
       </Box>
