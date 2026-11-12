@@ -1,0 +1,12 @@
+{
+  "name": "clawd-limits",
+  "owner": { "name": "Alirezawmoradi" },
+  "metadata": { "description": "Clawd Limits: a Claude Code mod that shows your 5-hour and weekly usage limits with a mood-changing Clawd." },
+  "plugins": [
+    {
+      "name": "clawd-limits",
+      "source": "./",
+      "description": "Clawd shows your 5-hour and weekly usage limits above the prompt, changing mood and colour as they fill."
+    }
+  ]
+}
