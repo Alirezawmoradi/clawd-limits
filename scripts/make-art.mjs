@@ -69,10 +69,10 @@ function clawd(m, pos, animate) {
 const ORANGE = '#D97757'
 const MOODS = [
   { id: 'chill', name: 'Chill', range: '0–25%', color: ORANGE, prop: '♪', quip: 'fresh tokens, who dis', five: 12, week: 5, rows: [HEAD, BODY, LEGS] },
-  { id: 'working', name: 'Working', range: '25–50%', color: ORANGE, prop: '⌨', quip: "in the zone, don't mind me", five: 38, week: 14, rows: [HEAD, BODY, LEGS] },
+  { id: 'working', name: 'Working', range: '25–50%', color: ORANGE, prop: '💻', quip: "in the zone, don't mind me", five: 38, week: 14, rows: [HEAD, BODY, LEGS] },
   { id: 'thirsty', name: 'Thirsty', range: 'burning fast', color: ORANGE, prop: '💧', quip: 'so... thirsty...', five: 46, week: 21, rows: [HEAD, BODY_MOUTH_OPEN, LEGS], pant: true, burn: '🔥 2.0%/min · empty in ~27m' },
   { id: 'sweaty', name: 'Sweaty', range: '50–70%', color: '#eab308', prop: '💦', quip: 'pacing myself... mostly', five: 63, week: 21, rows: [HEAD, BODY, LEGS_APART] },
-  { id: 'nervous', name: 'Nervous', range: '70–90%', color: '#ff6a00', prop: '‼', quip: 'maybe smaller prompts?', five: 81, week: 27, rows: [HEAD, BODY, LEGS], shake: 1 },
+  { id: 'nervous', name: 'Nervous', range: '70–90%', color: '#ff6a00', prop: '😬', quip: 'maybe smaller prompts?', five: 81, week: 27, rows: [HEAD, BODY, LEGS], shake: 1 },
   { id: 'panic', name: 'Panic', range: '90–100%', color: '#ef4444', prop: '🔥', quip: 'SAVE ME A FEW TOKENS', five: 96, week: 33, rows: [HEAD, BODY, LEGS_APART], shake: 2 },
   { id: 'napping', name: 'Napping', range: '100%', color: '#a78bfa', prop: 'z Z', quip: 'zzz — back at 15:40', five: 100, week: 36, rows: [HEAD_SLEEP, BODY, LEGS] },
   { id: 'party', name: 'Party', range: 'just reset', color: '#ec4899', prop: '🎉', quip: 'limits refreshed!', five: 0, week: 36, rows: [HEAD, BODY_ARMS_UP, LEGS_APART], reset: true },

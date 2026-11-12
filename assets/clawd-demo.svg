@@ -37,7 +37,7 @@
       <rect x="250" y="146" width="35" height="18" rx="3" fill="#D97757"/>
       <text x="514" y="160" fill="#D97757" font-size="15" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"> 14%</text>
       <text x="564" y="160" fill="#8b93a7" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">↻ 3d 19h · Mon 06:30</text>
-      <text x="40" y="214" fill="#D97757" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">⌨</text>
+      <text x="40" y="214" fill="#D97757" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">💻</text>
       <text x="84" y="214" fill="#e6e9f0" font-size="16" font-style="italic" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">"in the zone, don't mind me"</text>
       
       <text x="790" y="214" text-anchor="end" fill="#D97757" font-size="13" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">WORKING · 25–50%</text>
@@ -94,7 +94,7 @@
       <rect x="250" y="146" width="67.5" height="18" rx="3" fill="#ff6a00"/>
       <text x="514" y="160" fill="#ff6a00" font-size="15" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"> 27%</text>
       <text x="564" y="160" fill="#8b93a7" font-size="14" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">↻ 3d 19h · Mon 06:30</text>
-      <text x="40" y="214" fill="#ff6a00" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">‼</text>
+      <text x="40" y="214" fill="#ff6a00" font-size="17" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">😬</text>
       <text x="84" y="214" fill="#e6e9f0" font-size="16" font-style="italic" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">"maybe smaller prompts?"</text>
       
       <text x="790" y="214" text-anchor="end" fill="#ff6a00" font-size="13" font-weight="700" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">NERVOUS · 70–90%</text>

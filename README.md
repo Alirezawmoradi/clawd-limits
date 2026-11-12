@@ -4,7 +4,7 @@
 
 **Your usage limits, reported by a tiny pixel creature with feelings.**
 
-<img src="assets/clawd-demo.svg" alt="Animated preview: Clawd changes mood and colour as the 5-hour and weekly bars fill" width="820">
+<img src="assets/demo.gif" alt="Clawd Limits in a terminal: /limits preview tours all eight moods above the Claude Code prompt" width="900">
 
 *A [Claude Code](https://claude.com/claude-code) mod that puts Clawd above your prompt to keep an eye on your **5-hour** and **weekly** limits, so you don't have to.*
 
@@ -42,14 +42,16 @@ Clawd's mood follows whichever window is **fuller**: the 5-hour one or the weekl
 
 <div align="center">
 <img src="assets/clawd-moods.svg" alt="Clawd's eight moods: chill, working, thirsty, sweaty, nervous, panic, napping and party" width="820">
+
+<img src="assets/clawd-demo.svg" alt="Animated preview: Clawd changes mood and colour as the 5-hour and weekly bars fill" width="820">
 </div>
 
 | Usage | Mood | Colour | What Clawd does | What Clawd says |
 |---|---|---|---|---|
 | 0–25% | 😎 **Chill** | Clawd orange | Hums a little tune ♪♫ and dances every now and then | *"fresh tokens, who dis"* |
-| 25–50% | 🙂 **Working** | Clawd orange | Taps away on a tiny keyboard ⌨ | *"in the zone, don't mind me"* |
+| 25–50% | 🙂 **Working** | Clawd orange | Busy on its little laptop 💻 | *"in the zone, don't mind me"* |
 | 50–70% | 😅 **Sweaty** | 🟡 yellow | A sweat drop 💦 appears and disappears. It's fine. Probably. | *"pacing myself... mostly"* |
-| 70–90% | 😰 **Nervous** | 🟠 bright orange | Trembles every few seconds ‼ | *"maybe smaller prompts?"* |
+| 70–90% | 😰 **Nervous** | 🟠 bright orange | Trembles every few seconds, grimacing 😬😰 | *"maybe smaller prompts?"* |
 | 90–100% | 😱 **Panic** | 🔴 red | Shakes side to side, on fire 🔥 | *"SAVE ME A FEW TOKENS"* |
 | 100% | 😴 **Napping** | 🟣 purple | Eyes closed, little `z`s float up into the sky | *"zzz — back at 15:40"* |
 | Just reset | 🥳 **Party** | 🩷 pink | Arms up, sparkles ✦ ✧ drift overhead, for 5 whole minutes | *"limits refreshed!"* |
@@ -63,6 +65,7 @@ Some tasks are *hungry*. When a single task burns through your 5-hour window fas
   ▐▛███▜▌   5h   █████████░░░░░░░░░░░  46%  ↻ 2h 00m · 14:00 Berlin
  ▝▜█▄ ▄█▛▘
    ▘▘▌▝▝    week ████░░░░░░░░░░░░░░░░  21%  ↻ 3d 19h · Mon 06:30 Berlin
+            ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
             💧 "so... thirsty..."  🔥 2.0%/min · empty in ~27m
 ```
 
@@ -93,13 +96,27 @@ Calm by design: nothing flashes while you're trying to read.
  ▐▛███▜▌  5h   █████████████░░░░░░░  63%  ↻ 1h 12m · 12:12 Berlin
 ▝▜█████▛▘
   ▘▘ ▝▝   week ████░░░░░░░░░░░░░░░░  21%  ↻ 3d 19h · Mon 06:30 Berlin
-          💦 "pacing myself... mostly"
+          ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈
+          💦 "pacing myself... mostly"    ⛽ ctx E ▰▰▰▰▱▱▱▱ F 52% left
 ```
 
 - **Percent used** for each window
 - **Countdown** to the reset (`↻ 1h 12m`)
 - **Reset time** in 24h, in *your* time zone (Clawd reads your system clock, so you'll see your own city)
+- **⛽ Context fuel gauge**: how much room is left in this conversation's context window
 - An empty row on top and between the bars, so nothing feels cramped
+
+### ⛽ The fuel gauge (context window)
+
+Every message you send carries the whole conversation with it: your messages, Claude's replies, every file read. That's the **context**, and the fuller it gets, the more each message eats from your limits. So Clawd keeps a car-style fuel gauge for it:
+
+```
+fresh session   ⛽ ctx E ▰▰▰▰▰▰▰▰ F 100% left
+long session    ⛽ ctx E ▰▰▰▱▱▱▱▱ F  38% left
+running on fumes ⛽ ctx E ▰▱▱▱▱▱▱▱ F  15% left ⚠   ← turns red
+```
+
+A full tank means a fresh, cheap conversation. When it runs low, `/compact` (summarise and keep going) or `/clear` (start fresh) fills it back up. If a task gets thirsty while the tank is low, Clawd's tip tells you so.
 
 ### 🔔 Toasts
 
@@ -111,6 +128,10 @@ Calm by design: nothing flashes while you're trying to read.
 | Command | Does |
 |---|---|
 | `/limits` | Hides Clawd. Run it again and Clawd comes back, no hard feelings. |
+| `/limits preview` | 🎬 **Mood tour!** Clawd shows off all 8 moods, 3 seconds each, with made-up numbers. Perfect for screenshots. |
+| `/limits preview <mood>` | Shows one mood for 15 seconds: `chill`, `working`, `thirsty`, `sweaty`, `nervous`, `panic`, `napping` or `party`. |
+
+Previews are pure pretend: no toasts, no real data touched, and Clawd goes back to your real numbers when it's done.
 
 ## ❓ FAQ
 
