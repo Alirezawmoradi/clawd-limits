@@ -67,3 +67,42 @@ test('times show in the local zone', async ($, on) => {
   expect(text).toContain('pacing myself... mostly')
   expect(text).toMatch(/Mon \d\d:\d\d \S/)
 })
+
+test('a task burning fast makes Clawd thirsty, with the burn rate', async ($, on) => {
+  let now = NOW
+  on('command.register', () => ({ value: { command: 'limits' } }))
+  on('clock.now', () => ({ value: now }))
+  on('clock.every', () => ({ value: undefined }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('session.usage', () => ({
+    value: {
+      startedAt: NOW,
+      context: {},
+      rateLimits: [{ kind: 'five_hour', percentUsed: 40, resetsAt: '2026-11-12T13:00:00Z' }],
+    },
+  }))
+  on('session.start', (_: unknown, e: any) => ({ cwd: e.cwd }))
+  on('turn.start', (_: unknown, e: any) => ({ turnId: e.turnId }) as any)
+  on('turn.complete', () => ({ text: '' }) as any)
+  on('session.measure', (_: unknown, e: any) => ({ changed: e.changed }))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'refactor everything', turnId: 't1' } as any)
+
+  // Three minutes later the 5h window went 40% → 46%: 2%/min, +6% this task.
+  now = NOW + 3 * 60_000
+  await $.session.measure({
+    context: {},
+    rateLimits: [{ kind: 'five_hour', percentUsed: 46, resetsAt: '2026-11-12T13:00:00Z' }],
+    changed: ['rateLimits'],
+  } as any)
+
+  const busy = await drawn($)
+  expect(busy).toContain('so... thirsty...')
+  expect(busy).toContain('2.0%/min')
+  expect(busy).toMatch(/empty in ~|lasts till reset/)
+
+  // The task ends: Clawd is back to its usage mood.
+  await $.turn.complete({ answer: 'done', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' } as any)
+  expect(await drawn($)).toContain("in the zone, don't mind me")
+})

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { LimitWindow } from '../types'
+import type { BurnSample, LimitWindow, TaskInfo } from '../types'
 
 // ── State ────────────────────────────────────────────────────────────────
 
@@ -13,14 +13,25 @@ const moodAtom = atom({ plugin: 'clawd-limits', key: 'mood' } as const, '')
 const partyAtom = atom({ plugin: 'clawd-limits', key: 'partyUntil' } as const, 0)
 const celebratedAtom = atom({ plugin: 'clawd-limits', key: 'celebrated' } as const, [])
 const alertedAtom = atom({ plugin: 'clawd-limits', key: 'alerted' } as const, [])
+const samplesAtom = atom({ plugin: 'clawd-limits', key: 'samples' } as const, [], { shape: 'samples-1' })
+const taskAtom = atom({ plugin: 'clawd-limits', key: 'task' } as const, null, { shape: 'task-1' })
+const tippedAtom = atom({ plugin: 'clawd-limits', key: 'tipped' } as const, [])
 
 const TICK_MS = 500
 const PARTY_MS = 5 * 60_000
 const KINDS = ['five_hour', 'seven_day']
 
+// Thirst: a task burning the 5h window fast, or eating a lot of it.
+const THIRSTY_RATE = 1 // % of the 5h window per minute
+const THIRSTY_TASK = 5 // % of the 5h window used by one task
+const RATE_WINDOW_MS = 5 * 60_000 // the burn rate looks back this far
+const MIN_RATE_SPAN_MIN = 2 // never divide by less than 2 minutes (no spikes)
+const TONGUE_COLOR = '#f472b6'
+
 // ── Moods ────────────────────────────────────────────────────────────────
 
-type Mood = 'waiting' | 'chill' | 'working' | 'sweaty' | 'nervous' | 'panic' | 'napping' | 'party'
+type Mood =
+  | 'waiting' | 'chill' | 'working' | 'sweaty' | 'nervous' | 'panic' | 'napping' | 'party' | 'thirsty'
 
 const MOOD: Record<Mood, { color: string; prop: [string, string]; quip: string }> = {
   waiting: { color: '#D97757', prop: ['…', ' '], quip: "send a message and I'll read your limits" },
@@ -31,7 +42,12 @@ const MOOD: Record<Mood, { color: string; prop: [string, string]; quip: string }
   panic: { color: '#ef4444', prop: ['🔥', '🔥'], quip: 'SAVE ME A FEW TOKENS' },
   napping: { color: '#a78bfa', prop: ['z', 'Z'], quip: 'zzz' },
   party: { color: '#ec4899', prop: ['🎉', '✨'], quip: 'limits refreshed!' },
+  // Thirsty keeps the colour of the usage level it sits on; this one is unused.
+  thirsty: { color: '#D97757', prop: ['💧', '  '], quip: 'so... thirsty...' },
 }
+
+/** Moods that thirst never overrides: they say something more urgent. */
+const OUTRANKS_THIRST: Mood[] = ['waiting', 'panic', 'napping', 'party']
 
 function moodFor(pct: number): Mood {
   if (pct >= 100) return 'napping'
@@ -66,7 +82,13 @@ function sprite(mood: Mood, tick: number, pose: Pose): [string, string, string, 
   const step = tick % DANCE_EVERY
   const canDance = ['waiting', 'chill', 'working', 'sweaty', 'party'].includes(mood)
 
-  if (pose.isWorking && mood !== 'napping') {
+  if (mood === 'thirsty') {
+    // Panting: mouth wide open with the tongue out, then closed, every tick.
+    if (tick % 2 === 0) {
+      body = '▝▜█▄ ▄█▛▘'
+      legs = '  ▘▘▌▝▝'
+    }
+  } else if (pose.isWorking && mood !== 'napping') {
     legs = tick % 2 === 0 ? '  ▘▘ ▝▝' : '  ▝▘ ▘▝' // walk in place
   } else if (mood === 'panic') {
     if (tick % 8 < 4) x = tick % 2 === 0 ? 0 : 2 // shake in bursts
@@ -80,7 +102,7 @@ function sprite(mood: Mood, tick: number, pose: Pose): [string, string, string, 
   if (mood === 'party') {
     body = tick % 2 === 0 ? '▗▟█████▙▖' : '▝▜█████▛▘'
   }
-  if (pose.isBouncing && tick % 2 === 0 && !pose.isWorking) legs = ' ▝▘   ▝▘'
+  if (pose.isBouncing && tick % 2 === 0 && !pose.isWorking && mood !== 'thirsty') legs = ' ▝▘   ▝▘'
 
   const head = eyesClosed ? ' ▐▄███▄▌' : ' ▐▛███▜▌'
   const shift = (s: string) => (' '.repeat(x) + s).padEnd(SPRITE_WIDTH).slice(0, SPRITE_WIDTH)
@@ -94,6 +116,19 @@ function sprite(mood: Mood, tick: number, pose: Pose): [string, string, string, 
       const [row, col, ch] = at
       const line = rows[row] ?? ''
       rows[row] = line.slice(0, col) + ch + line.slice(col + 1)
+    }
+  }
+
+  if (mood === 'thirsty') {
+    // Sweat on the head the whole time; fire flickers around Clawd: the top
+    // corners while the mouth is open, beside the feet while it is closed.
+    // (🔥 and 💦 are two cells wide, and two UTF-16 units long, so the 12-cell
+    // rows stay 12 cells.)
+    const isOpen = tick % 2 === 0
+    rows[0] = isOpen ? '🔥     💦 🔥' : '      💦    '
+    if (!isOpen) {
+      const feet = rows[3] ?? ''
+      rows[3] = '🔥' + feet.slice(2, 9) + '🔥' + feet.slice(11)
     }
   }
 
@@ -166,12 +201,54 @@ function shown(windows: LimitWindow[], now: number): Shown[] {
 const keyOf = (win: LimitWindow) => `${win.kind}@${win.resetsAt ?? ''}`
 const nameOf = (kind: string) => (kind === 'five_hour' ? '5-hour' : 'weekly')
 
+// ── Thirst (burn rate) ───────────────────────────────────────────────────
+
+/** The 5h window's % as shown now (0 once its reset time passed), or null. */
+function fivePct(windows: LimitWindow[], now: number): number | null {
+  const five = shown(windows, now).find(row => row.label.trim() === '5h')
+  return five ? five.pct : null
+}
+
+type Thirst = { isThirsty: boolean; rate: number; taskDelta: number }
+
+/**
+ * How fast the 5h window is burning (% per minute over the last 5 minutes,
+ * measured up to now so it cools down by itself) and how much the running
+ * task has used. Thirsty only while a task runs.
+ */
+function thirstOf(samples: BurnSample[], task: TaskInfo | null, pct: number | null, now: number): Thirst {
+  if (!task || pct === null) return { isThirsty: false, rate: 0, taskDelta: 0 }
+  const first = samples.find(s => now - s.at <= RATE_WINDOW_MS)
+  const minutes = first ? Math.max(MIN_RATE_SPAN_MIN, (now - first.at) / 60_000) : 1
+  const rate = first ? Math.max(0, (pct - first.pct) / minutes) : 0
+  const taskDelta = task.startPct === null ? 0 : Math.max(0, pct - task.startPct)
+  return { isThirsty: rate >= THIRSTY_RATE || taskDelta >= THIRSTY_TASK, rate, taskDelta }
+}
+
+async function addSample($: EngineInterface, at: number, pct: number) {
+  await update($, samplesAtom, list => {
+    const last = list[list.length - 1]
+    // The window reset under us: old readings would read as negative burn.
+    const kept = last && pct < last.pct - 1 ? [] : list
+    return [...kept.filter(s => at - s.at <= 2 * RATE_WINDOW_MS), { at, pct }].slice(-60)
+  })
+}
+
 async function ingest($: EngineInterface, rateLimits: readonly LimitWindow[]) {
   const windows = rateLimits
     .filter(win => KINDS.includes(win.kind))
     .map(win => ({ kind: win.kind, percentUsed: win.percentUsed, resetsAt: win.resetsAt }))
   if (windows.length === 0) return
   await update($, windowsAtom, () => windows)
+
+  const now = await $.clock.now()
+  const pct = fivePct(windows, now)
+  if (pct !== null) {
+    await addSample($, now, pct)
+    // A task that began before any reading takes its first one as its start.
+    const task = await read($, taskAtom)
+    if (task && task.startPct === null) await update($, taskAtom, () => ({ ...task, startPct: pct }))
+  }
 
   const alerted = await read($, alertedAtom)
   for (const win of windows) {
@@ -182,11 +259,24 @@ async function ingest($: EngineInterface, rateLimits: readonly LimitWindow[]) {
   }
 }
 
-/** The mood follows whichever window is fuller; party for a while after a reset. */
-function moodOf(rows: Shown[], isParty: boolean): { mood: Mood; fullest: Shown | null } {
+/**
+ * The mood follows whichever window is fuller; party for a while after a
+ * reset; thirsty while a task burns fast, unless something more urgent shows.
+ * `base` is the usage level's mood, whose colour Clawd keeps when thirsty.
+ */
+function moodOf(rows: Shown[], isParty: boolean, isThirsty: boolean): { mood: Mood; base: Mood; fullest: Shown | null } {
   const fullest = rows.reduce<Shown | null>((top, row) => (!top || row.pct > top.pct ? row : top), null)
-  const mood: Mood = !fullest ? 'waiting' : isParty && fullest.pct < 100 ? 'party' : moodFor(fullest.pct)
-  return { mood, fullest }
+  const base: Mood = !fullest ? 'waiting' : isParty && fullest.pct < 100 ? 'party' : moodFor(fullest.pct)
+  const mood: Mood = isThirsty && !OUTRANKS_THIRST.includes(base) ? 'thirsty' : base
+  return { mood, base, fullest }
+}
+
+/** Everything a tick or a drawing needs to pick the mood, read in one place. */
+async function readMood($: EngineInterface, now: number) {
+  const windows = await read($, windowsAtom)
+  const thirst = thirstOf(await read($, samplesAtom), await read($, taskAtom), fivePct(windows, now), now)
+  const rows = shown(windows, now)
+  return { windows, rows, thirst, ...moodOf(rows, (await read($, partyAtom)) > now, thirst.isThirsty) }
 }
 
 /**
@@ -196,15 +286,23 @@ function moodOf(rows: Shown[], isParty: boolean): { mood: Mood; fullest: Shown |
 async function onTick($: EngineInterface) {
   const tick = await update($, tickAtom, n => n + 1)
   const now = await $.clock.now()
-  const windows = await read($, windowsAtom)
-
-  const { mood } = moodOf(shown(windows, now), (await read($, partyAtom)) > now)
+  const { windows, mood, thirst } = await readMood($, now)
   if ((await read($, moodAtom)) !== mood) {
     await update($, moodAtom, () => mood)
     await update($, bounceAtom, () => tick + 6)
   }
 
   if (tick % 4 !== 0) return
+
+  // One tip per task once it gets thirsty.
+  const task = await read($, taskAtom)
+  if (mood === 'thirsty' && task && !(await read($, tippedAtom)).includes(task.turnId)) {
+    await update($, tippedAtom, list => [...list, task.turnId].slice(-20))
+    $.ui.toast(
+      `🌵 Clawd: this task is burning fast (${thirst.rate.toFixed(1)}%/min, +${Math.round(thirst.taskDelta)}% so far) — consider /compact or a smaller model.`,
+    )
+  }
+
   const celebrated = await read($, celebratedAtom)
   for (const win of windows) {
     if (!win.resetsAt) continue
@@ -233,6 +331,26 @@ export const register: Register = on => {
     return next(e)
   })
 
+  // A task is one main-thread turn: from your prompt to Claude's answer.
+  // Subagent turns (agentId set) belong to the task already running.
+  on('turn.start', async ($, e, next) => {
+    if (!e.agentId) {
+      const now = await $.clock.now()
+      const pct = fivePct(await read($, windowsAtom), now)
+      const task: TaskInfo = { turnId: e.turnId, startPct: pct }
+      await update($, taskAtom, () => task)
+      if (pct !== null) await addSample($, now, pct)
+    }
+
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (!e.agentId) await update($, taskAtom, () => null)
+
+    return next(e)
+  })
+
   on('session.measure', async ($, e, next) => {
     if (e.changed.includes('rateLimits')) await ingest($, e.rateLimits)
 
@@ -251,13 +369,11 @@ export const register: Register = on => {
     const { Box, Text } = $.ui.resolve(e)
     const now = await $.clock.now()
     const tick = await read($, tickAtom)
-    const rows = shown(await read($, windowsAtom), now)
-    const isParty = (await read($, partyAtom)) > now
-
-    const { mood, fullest } = moodOf(rows, isParty)
+    const { rows, mood, base, fullest, thirst } = await readMood($, now)
     const isBouncing = tick < (await read($, bounceAtom))
 
-    const look = MOOD[mood]
+    // Thirsty Clawd keeps the colour of the usage level underneath.
+    const look = { ...MOOD[mood], color: MOOD[base].color }
     const art = sprite(mood, tick, { isBouncing, isWorking: e.props.isWorking })
     const prop = look.prop[Math.floor(tick / 2) % 2]
     const zone = zoneLabel()
@@ -268,6 +384,33 @@ export const register: Register = on => {
       mood === 'napping' && fullest?.resetsAt
         ? `zzz — back at ${clockAt(fullest.resetsAt, false)}`
         : look.quip
+
+    // While thirsty: burn speed, and when the 5h window would run dry at it.
+    let burn = ''
+    if (mood === 'thirsty') {
+      const five = rows.find(row => row.label.trim() === '5h')
+      if (thirst.rate >= 0.1 && five) {
+        const msLeft = ((100 - five.pct) / thirst.rate) * 60_000
+        const resetIn = five.resetsAt ? Date.parse(five.resetsAt) - now : Infinity
+        const forecast = msLeft >= resetIn ? 'lasts till reset ✓' : `empty in ~${countdown(msLeft)}`
+        burn = `🔥 ${thirst.rate.toFixed(1)}%/min · ${forecast}`
+      } else {
+        burn = `🔥 this task: +${Math.round(thirst.taskDelta)}%`
+      }
+    }
+
+    // The tongue (▌ on the legs row while panting) is drawn pink.
+    const legsRow = (text: string) => {
+      const at = mood === 'thirsty' ? text.indexOf('▌') : -1
+      if (at < 0) return <Text color={look.color}>{text}</Text>
+      return (
+        <Text>
+          <Text color={look.color}>{text.slice(0, at)}</Text>
+          <Text color={TONGUE_COLOR}>▌</Text>
+          <Text color={look.color}>{text.slice(at + 1)}</Text>
+        </Text>
+      )
+    }
 
     const line = (row: Shown | undefined) => {
       if (!row) return <Text dimColor>no reading yet</Text>
@@ -302,13 +445,14 @@ export const register: Register = on => {
         </Text>
         <Text color={look.color}>{art[2]}</Text>
         <Text>
-          <Text color={look.color}>{art[3]}</Text>
+          {legsRow(art[3])}
           {line(rows[1])}
         </Text>
         <Text>
           <Text>{' '.repeat(SPRITE_WIDTH)}</Text>
           <Text color={look.color}>{prop} </Text>
           <Text italic>"{quip}"</Text>
+          {burn ? <Text color={look.color}>  {burn}</Text> : null}
         </Text>
       </Box>
     )
