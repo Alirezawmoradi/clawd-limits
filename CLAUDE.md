@@ -35,3 +35,10 @@ A Claude Code **mod** (function-hooks plugin) that draws pixel Clawd in the `Abo
 
 - Develop with `claude --plugin-dir .` (hot-reloads on save), check with `claude plugin validate .` and `claude plugin test .`.
 - Publishing: follow the plugin-authoring skill's "Sharing a mod" steps (secret scan, then `git init`, commit, push). `gh` CLI was not installed when this was written.
+
+## Thirsty mood (v0.3 work)
+
+- Thirsty while a main-thread task runs (`turn.start`/`turn.complete` without `agentId`) and either the 5h window burns >= 1 %/min (over the last 5 min, measured up to now, min 2-minute span) or the task used >= 5 % of it.
+- Look: panting (mouth open `▝▜█▄ ▄█▛▘` + pink tongue `▌` on the legs row, alternating with the normal face), 💦 on the head (sky row) and 🔥 flickering around it (top corners while the mouth is open, beside the feet while closed; each emoji is 2 cells and 2 UTF-16 units, so rows stay 12 cells), prop 💧, quip "so... thirsty...", plus `🔥 x.x%/min · empty in ~Nm` (or "lasts till reset ✓").
+- Keeps the colour of the usage-level mood underneath; waiting, panic, napping and party outrank it.
+- One toast per task suggesting /compact or a smaller model.

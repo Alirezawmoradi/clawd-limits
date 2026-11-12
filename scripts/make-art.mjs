@@ -25,6 +25,9 @@ const BODY = '▝▜█████▛▘'
 const BODY_ARMS_UP = '▗▟█████▙▖'
 const LEGS = '  ▘▘ ▝▝'
 const LEGS_APART = ' ▝▘   ▝▘'
+const BODY_MOUTH_OPEN = '▝▜█▄ ▄█▛▘'
+const TONGUE = ['', '', '    ▌'] // under the open mouth, on the legs row
+const TONGUE_COLOR = '#f472b6'
 
 function rects(rows, { x, y, qw, qh, color, dx = 0 }) {
   const out = []
@@ -42,11 +45,32 @@ function rects(rows, { x, y, qw, qh, color, dx = 0 }) {
   return `<g fill="${color}" shape-rendering="crispEdges">${out.join('')}</g>`
 }
 
+/**
+ * Clawd for one mood. Thirsty pants: mouth open with a pink tongue, and when
+ * `animate` is set, alternating with the closed mouth.
+ */
+function clawd(m, pos, animate) {
+  if (!m.pant) return rects(m.rows, { ...pos, color: m.color })
+  // Emoji placed on the sprite's cell grid: (col, row), row -1 being the sky.
+  const cw = pos.qw * 2, ch = pos.qh * 2, size = Math.round(ch * 0.8)
+  const emoji = (sym, col, row) =>
+    `<text x="${pos.x + col * cw}" y="${pos.y + row * ch + ch * 0.8}" font-size="${size}">${sym}</text>`
+  const sweat = emoji('💦', 5.5, -1)
+  const fireTop = emoji('🔥', -1, -1) + emoji('🔥', 8, -1)
+  const fireFeet = emoji('🔥', -1, 2) + emoji('🔥', 7.5, 2)
+  const open = rects([HEAD, BODY_MOUTH_OPEN, LEGS], { ...pos, color: m.color }) + rects(TONGUE, { ...pos, color: TONGUE_COLOR }) + fireTop
+  if (!animate) return sweat + open + fireFeet
+  const closed = rects([HEAD, BODY, LEGS], { ...pos, color: m.color }) + fireFeet
+  const flip = values => `<animate attributeName="opacity" dur="0.5s" repeatCount="indefinite" calcMode="discrete" values="${values}"/>`
+  return `${sweat}<g>${open}${flip('1;0')}</g><g opacity="0">${closed}${flip('0;1')}</g>`
+}
+
 // ── Moods ────────────────────────────────────────────────────────────────
 const ORANGE = '#D97757'
 const MOODS = [
   { id: 'chill', name: 'Chill', range: '0–25%', color: ORANGE, prop: '♪', quip: 'fresh tokens, who dis', five: 12, week: 5, rows: [HEAD, BODY, LEGS] },
   { id: 'working', name: 'Working', range: '25–50%', color: ORANGE, prop: '⌨', quip: "in the zone, don't mind me", five: 38, week: 14, rows: [HEAD, BODY, LEGS] },
+  { id: 'thirsty', name: 'Thirsty', range: 'burning fast', color: ORANGE, prop: '💧', quip: 'so... thirsty...', five: 46, week: 21, rows: [HEAD, BODY_MOUTH_OPEN, LEGS], pant: true, burn: '🔥 2.0%/min · empty in ~27m' },
   { id: 'sweaty', name: 'Sweaty', range: '50–70%', color: '#eab308', prop: '💦', quip: 'pacing myself... mostly', five: 63, week: 21, rows: [HEAD, BODY, LEGS_APART] },
   { id: 'nervous', name: 'Nervous', range: '70–90%', color: '#ff6a00', prop: '‼', quip: 'maybe smaller prompts?', five: 81, week: 27, rows: [HEAD, BODY, LEGS], shake: 1 },
   { id: 'panic', name: 'Panic', range: '90–100%', color: '#ef4444', prop: '🔥', quip: 'SAVE ME A FEW TOKENS', five: 96, week: 33, rows: [HEAD, BODY, LEGS_APART], shake: 2 },
@@ -72,7 +96,7 @@ function demo() {
     if (i < n - 1) { keyTimes.push((i + 1) / n); values.push(0) }
     const show = `<animate attributeName="opacity" dur="${total}s" repeatCount="indefinite" calcMode="discrete" keyTimes="${keyTimes.map(k => k.toFixed(4)).join(';')}" values="${values.join(';')}"/>`
 
-    const sprite = rects(m.rows, { x: 40, y: 78, qw: 8, qh: 14, color: m.color })
+    const sprite = clawd(m, { x: 40, y: 78, qw: 8, qh: 14 }, true)
     const wiggle = m.shake
       ? `<animateTransform attributeName="transform" type="translate" dur="0.18s" repeatCount="indefinite" values="${-3 * m.shake} 0;${3 * m.shake} 0;${-3 * m.shake} 0"/>`
       : `<animateTransform attributeName="transform" type="translate" dur="1.1s" repeatCount="indefinite" values="0 0;0 -5;0 0"/>`
@@ -96,6 +120,7 @@ function demo() {
       ${bar(146, 'week', m.week, '↻ 3d 19h · Mon 06:30')}
       <text x="40" y="214" fill="${m.color}" font-size="17" ${MONO}>${esc(m.prop)}</text>
       <text x="84" y="214" fill="#e6e9f0" font-size="16" font-style="italic" ${MONO}>"${esc(m.quip)}"</text>
+      ${m.burn ? `<text x="290" y="214" fill="${m.color}" font-size="14" ${MONO}>${esc(m.burn)}</text>` : ''}
       <text x="${W - 30}" y="214" text-anchor="end" fill="${m.color}" font-size="13" font-weight="700" ${MONO}>${m.name.toUpperCase()} · ${m.range}</text>
     </g>`
   }).join('')
@@ -124,20 +149,21 @@ function gallery() {
     const offset = ((perRow - inRow) * (cardW + gap)) / 2
     const x = gap + col * (cardW + gap) + offset
     const y = gap + row * (cardH + gap)
-    const sprite = rects(m.rows, { x: x + 35, y: y + 34, qw: 6, qh: 11, color: m.color })
+    const sprite = clawd(m, { x: x + 35, y: y + 34, qw: 6, qh: 11 }, false)
     return `
   <g>
     <rect x="${x}" y="${y}" width="${cardW}" height="${cardH}" rx="12" fill="#151821" stroke="${m.color}" stroke-opacity="0.55"/>
     ${m.reset ? `<text x="${x + 30}" y="${y + 28}" fill="${m.color}" font-size="13" ${MONO}>✦ · ✧ · ✦ · ✧</text>` : ''}
     ${sprite}
-    ${m.shake ? `<text x="${x + 22}" y="${y + 72}" fill="${m.color}" font-size="${14 + m.shake * 4}" ${MONO}>(</text><text x="${x + 146}" y="${y + 72}" fill="${m.color}" font-size="${14 + m.shake * 4}" ${MONO}>)</text>` : ''}    <text x="${x + cardW - 26}" y="${y + 66}" text-anchor="middle" fill="${m.color}" font-size="20" ${MONO}>${esc(m.prop)}</text>
+    ${m.shake ? `<text x="${x + 22}" y="${y + 72}" fill="${m.color}" font-size="${14 + m.shake * 4}" ${MONO}>(</text><text x="${x + 146}" y="${y + 72}" fill="${m.color}" font-size="${14 + m.shake * 4}" ${MONO}>)</text>` : ''}
+    ${m.pant ? '' : `<text x="${x + cardW - 26}" y="${y + 66}" text-anchor="middle" fill="${m.color}" font-size="20" ${MONO}>${esc(m.prop)}</text>`}
     <text x="${x + cardW / 2}" y="${y + 138}" text-anchor="middle" fill="${m.color}" font-size="17" font-weight="700" ${MONO}>${m.name}</text>
     <text x="${x + cardW / 2}" y="${y + 160}" text-anchor="middle" fill="#8b93a7" font-size="13" ${MONO}>${esc(m.range)}</text>
     <text x="${x + cardW / 2}" y="${y + 182}" text-anchor="middle" fill="#c9cfdb" font-size="11.5" font-style="italic" ${MONO}>"${esc(m.quip)}"</text>
   </g>`
   }).join('')
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Clawd's seven moods: chill, working, sweaty, nervous, panic, napping and party">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Clawd's eight moods: chill, working, thirsty, sweaty, nervous, panic, napping and party">
   ${cards}
 </svg>
 `

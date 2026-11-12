@@ -41,7 +41,7 @@ Then say hi to Clawd. That's it. No config, no API keys, no feeding schedule.
 Clawd's mood follows whichever window is **fuller**: the 5-hour one or the weekly one. As usage climbs, Clawd changes pose, colour, prop and what it says.
 
 <div align="center">
-<img src="assets/clawd-moods.svg" alt="Clawd's seven moods: chill, working, sweaty, nervous, panic, napping and party" width="820">
+<img src="assets/clawd-moods.svg" alt="Clawd's eight moods: chill, working, thirsty, sweaty, nervous, panic, napping and party" width="820">
 </div>
 
 | Usage | Mood | Colour | What Clawd does | What Clawd says |
@@ -54,6 +54,22 @@ Clawd's mood follows whichever window is **fuller**: the 5-hour one or the weekl
 | 100% | 😴 **Napping** | 🟣 purple | Eyes closed, little `z`s float up into the sky | *"zzz — back at 15:40"* |
 | Just reset | 🥳 **Party** | 🩷 pink | Arms up, sparkles ✦ ✧ drift overhead, for 5 whole minutes | *"limits refreshed!"* |
 
+### 🌵 Plus a bonus mood: Thirsty
+
+Some tasks are *hungry*. When a single task burns through your 5-hour window fast (**1% or more per minute**) or eats a big chunk of it (**5% or more in one task**), Clawd gets **thirsty**: mouth wide open, little pink tongue out, panting, sweat 💦 on its head and 🔥 fire flickering all around it (top corners when the mouth opens, by its feet when it closes). It keeps the colour of your usage level, so a thirsty orange Clawd means "fast, but you're fine", and a thirsty yellow one means "fast *and* getting full".
+
+```
+🔥     💦 🔥
+  ▐▛███▜▌   5h   █████████░░░░░░░░░░░  46%  ↻ 2h 00m · 14:00 Berlin
+ ▝▜█▄ ▄█▛▘
+   ▘▘▌▝▝    week ████░░░░░░░░░░░░░░░░  21%  ↻ 3d 19h · Mon 06:30 Berlin
+            💧 "so... thirsty..."  🔥 2.0%/min · empty in ~27m
+```
+
+- 🔥 **Burn speed** and a **forecast**: when the 5h window would run dry at this pace, or *"lasts till reset ✓"* if you're safe.
+- 🌵 **One tip per task**: *"this task is burning fast — consider /compact or a smaller model."*
+- Panic, napping and party outrank thirst (they have more urgent things to say), and Clawd stops panting as soon as the task ends.
+
 While everything is fine (under 50%), Clawd keeps its **original orange**. The colour only changes when things get interesting. The bars always wear Clawd's current colour, so you can read the mood from across the room.
 
 ## 🕺 Clawd's moves
@@ -63,6 +79,7 @@ While everything is fine (under 50%), Clawd keeps its **original orange**. The c
 | 👀 **Blink** | Every 5 seconds, because staring is rude |
 | 💃 **Little dance** | A sway left and right every ~10 seconds while idle (chill, working, sweaty, party) |
 | 🚶 **Walk in place** | The whole time Claude is replying: Clawd is *busy* |
+| 👅 **Panting** | When a task burns tokens fast: mouth open, tongue out, mouth closed, repeat |
 | 🦘 **Bounce** | Whenever the mood changes, so you notice |
 | 🫨 **Tremble / shake** | Nervous trembles a little; panic shakes in bursts |
 | 💤 **Floating Zzz** | While napping, a `z` drifts up and turns into a `Z` |
