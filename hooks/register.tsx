@@ -23,11 +23,11 @@ const KINDS = ['five_hour', 'seven_day']
 type Mood = 'waiting' | 'chill' | 'working' | 'sweaty' | 'nervous' | 'panic' | 'napping' | 'party'
 
 const MOOD: Record<Mood, { color: string; prop: [string, string]; quip: string }> = {
-  waiting: { color: '#9ca3af', prop: ['…', ' '], quip: "send a message and I'll read your limits" },
-  chill: { color: '#22c55e', prop: ['♪', '♫'], quip: 'fresh tokens, who dis' },
-  working: { color: '#38bdf8', prop: ['⌨', '⌨'], quip: "in the zone, don't mind me" },
+  waiting: { color: '#D97757', prop: ['…', ' '], quip: "send a message and I'll read your limits" },
+  chill: { color: '#D97757', prop: ['♪', '♫'], quip: 'fresh tokens, who dis' },
+  working: { color: '#D97757', prop: ['⌨', '⌨'], quip: "in the zone, don't mind me" },
   sweaty: { color: '#eab308', prop: ['💦', '  '], quip: 'pacing myself... mostly' },
-  nervous: { color: '#f97316', prop: ['‼', '!'], quip: 'maybe smaller prompts?' },
+  nervous: { color: '#ff6a00', prop: ['‼', '!'], quip: 'maybe smaller prompts?' },
   panic: { color: '#ef4444', prop: ['🔥', '🔥'], quip: 'SAVE ME A FEW TOKENS' },
   napping: { color: '#a78bfa', prop: ['z', 'Z'], quip: 'zzz' },
   party: { color: '#ec4899', prop: ['🎉', '✨'], quip: 'limits refreshed!' },
@@ -42,17 +42,67 @@ function moodFor(pct: number): Mood {
   return 'chill'
 }
 
-// ── Clawd sprite (3 rows, padded to 10 cells) ────────────────────────────
+// ── Clawd sprite (4 rows × 12 cells: sky, head, body, legs) ──────────────
+//
+// Calm pacing at a 500 ms tick: an idle dance every 10 s that lasts 3 s,
+// walking while Claude works, and stronger per-mood effects (panic shakes,
+// nervous trembles, Zzz floats up while napping, party sparkles).
 
-function sprite(mood: Mood, tick: number, isBouncing: boolean): [string, string, string] {
+const SPRITE_WIDTH = 12
+const DANCE_EVERY = 20 // ticks (10 s)
+const DANCE_STEPS = [2, 1, 0, 1, 2, 1] // x offsets: sway right, center, left...
+const SPARKLES = '✦ · ✧ · '
+
+type Pose = { isBouncing: boolean; isWorking: boolean }
+
+function sprite(mood: Mood, tick: number, pose: Pose): [string, string, string, string] {
   const isBlink = tick % 10 === 0
   const eyesClosed = mood === 'napping' || isBlink
-  const head = eyesClosed ? ' ▐▄███▄▌  ' : ' ▐▛███▜▌  '
-  const body = mood === 'party' && tick % 2 === 0 ? '▗▟█████▙▖ ' : '▝▜█████▛▘ '
-  const hop = isBouncing || mood === 'party'
-  const legs = hop && tick % 2 === 0 ? ' ▝▘   ▝▘  ' : '  ▘▘ ▝▝   '
 
-  return [head, body, legs]
+  let x = 1
+  let legs = '  ▘▘ ▝▝'
+  let body = '▝▜█████▛▘'
+
+  const step = tick % DANCE_EVERY
+  const canDance = ['waiting', 'chill', 'working', 'sweaty', 'party'].includes(mood)
+
+  if (pose.isWorking && mood !== 'napping') {
+    legs = tick % 2 === 0 ? '  ▘▘ ▝▝' : '  ▝▘ ▘▝' // walk in place
+  } else if (mood === 'panic') {
+    if (tick % 8 < 4) x = tick % 2 === 0 ? 0 : 2 // shake in bursts
+  } else if (mood === 'nervous') {
+    if (tick % 8 < 2) x = tick % 2 === 0 ? 1 : 2 // tremble
+  } else if (canDance && step < DANCE_STEPS.length) {
+    x = DANCE_STEPS[step] ?? 1
+    if (x !== 1) legs = ' ▝▘   ▝▘'
+  }
+
+  if (mood === 'party') {
+    body = tick % 2 === 0 ? '▗▟█████▙▖' : '▝▜█████▛▘'
+  }
+  if (pose.isBouncing && tick % 2 === 0 && !pose.isWorking) legs = ' ▝▘   ▝▘'
+
+  const head = eyesClosed ? ' ▐▄███▄▌' : ' ▐▛███▜▌'
+  const shift = (s: string) => (' '.repeat(x) + s).padEnd(SPRITE_WIDTH).slice(0, SPRITE_WIDTH)
+  const rows = [' '.repeat(SPRITE_WIDTH), shift(head), shift(body), shift(legs)]
+
+  if (mood === 'napping') {
+    // One z drifts up and to the right, then starts again.
+    const drift: [number, number, string][] = [[2, 10, 'z'], [1, 11, 'z'], [0, 11, 'Z']]
+    const at = drift[Math.floor(tick / 2) % 4]
+    if (at) {
+      const [row, col, ch] = at
+      const line = rows[row] ?? ''
+      rows[row] = line.slice(0, col) + ch + line.slice(col + 1)
+    }
+  }
+
+  if (mood === 'party') {
+    const offset = tick % SPARKLES.length
+    rows[0] = (SPARKLES.slice(offset) + SPARKLES + SPARKLES).slice(0, SPRITE_WIDTH - 2) + '  '
+  }
+
+  return rows as [string, string, string, string]
 }
 
 // ── Time formatting ──────────────────────────────────────────────────────
@@ -208,7 +258,7 @@ export const register: Register = on => {
     const isBouncing = tick < (await read($, bounceAtom))
 
     const look = MOOD[mood]
-    const art = sprite(mood, tick, isBouncing)
+    const art = sprite(mood, tick, { isBouncing, isWorking: e.props.isWorking })
     const prop = look.prop[Math.floor(tick / 2) % 2]
     const zone = zoneLabel()
     const columns = e.viewport?.columns ?? 100
@@ -245,16 +295,18 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        <Text>
-          <Text color={look.color}>{art[0]}</Text>
-          {line(rows[0])}
-        </Text>
+        <Text color={look.color}>{art[0]}</Text>
         <Text>
           <Text color={look.color}>{art[1]}</Text>
+          {line(rows[0])}
+        </Text>
+        <Text color={look.color}>{art[2]}</Text>
+        <Text>
+          <Text color={look.color}>{art[3]}</Text>
           {line(rows[1])}
         </Text>
         <Text>
-          <Text color={look.color}>{art[2]}</Text>
+          <Text>{' '.repeat(SPRITE_WIDTH)}</Text>
           <Text color={look.color}>{prop} </Text>
           <Text italic>"{quip}"</Text>
         </Text>

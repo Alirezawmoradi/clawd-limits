@@ -20,8 +20,8 @@ A Claude Code **mod** (function-hooks plugin) that draws pixel Clawd in the `Abo
 
 ## Design decisions (from the user's answers)
 
-1. Placement: band above the prompt (3 rows).
-2. Mascot: pixel Clawd; **Clawd's colour changes per zone**.
+1. Placement: band above the prompt (5 rows: blank spacer row so it does not touch the spinner/Claude text above, 5h bar, blank row, week bar, quip — the user asked for a gap between the two bars).
+2. Mascot: pixel Clawd in the original Clawd orange (#D97757) while all is good (waiting, chill, working: under 50%); the colour changes from sweaty on (yellow, bright orange, red, purple napping, pink party).
 3. Moods: chill <25, working <50, sweaty <70, nervous <90, panic <100, napping =100, party for 5 min after a reset. Mood follows the fuller window.
 4. Per window: percent, countdown, reset clock time + time zone label.
 5. Bars: solid blocks `█░` in Clawd's current colour.
